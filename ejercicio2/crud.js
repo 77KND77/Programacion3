@@ -12,8 +12,19 @@ main().catch(err => console.log(err));
 
 mongoose.connect('mongodb://127.0.0.1:27017/test');
 const itemSchema = new mongoose.Schema({
-  name: String,
-  price: Number,
+  name: {
+    type: String,
+    required: true
+  },
+  price: {
+    type: Number,
+    validate: {
+      validator: function(v){
+        return v > 0;
+      },
+      message: props => 'el precio debe ser mayor que 0'
+    }
+  },
   available: Boolean
 });
 const Item = mongoose.model('Item', itemSchema);
@@ -32,11 +43,6 @@ async function main() {
   /* const pupos = await Gato.find({ name: /^pu/ });
   console.log(pupos); */
 }
-// Lista de ítems ficticios
-let items = [
-    { id: 1, name: 'Item 1', description: 'Descripción del Item 1' },
-    { id: 2, name: 'Item 2', description: 'Descripción del Item 2' }
-  ];
 
 // Definir una ruta simple para la página principal
 app.get('/', (req, res) => {
@@ -54,26 +60,57 @@ app.get('/api/items', async (req, res) => {
     var item = await Item.find({'_id':itemId});
       res.json(item);
     });  
-
-app.post('/api/items', (req, res) => {
+   
+app.post('/api/items', async (req, res) => {
 
   const item = new Item({ name: req.body.name , price: req.body.price, available: req.body.available });
   console.log(item.name);
-  item.save();
-  res.status(201).json(item);
+
+  try {
+   await item.save();
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      // Mostrar mensajes de error de validación
+      for (const field in error.errors) {
+        console.log(error.errors[field].message);
+        return res.status(400).json({'error': error.errors[field].message});
+      }
+    } else {
+      console.log('Error al crear el ítem:', error);
+      return res.status(400).json({'error': error});
+    }
+  }
+  
+  return res.status(201).json(item);
+  
     
   });  
 
 app.put('/api/items/:id', async (req, res) => {
     const itemId = req.params.id;
-    const doc = await Item.findOneAndUpdate({'_id':itemId},{ name: req.body.name , price: req.body.price, available: req.body.available });
+    let doc;
+   /*  const item = await Item.findById(itemId);
+      if (!item) {
+        return res.status(404).json({ "error": 'Ítem no encontrado' });
+      } */
+    try {
+      doc = await Item.findOneAndUpdate({'_id':itemId},{ name: req.body.name , price: req.body.price, available: req.body.available });
 
-      res.json(doc);
+    } catch (error) {
+      return res.status(404).json({'error': error});
+    }
+      return res.json(doc);
   
   });  
   app.delete('/api/items/:id', async (req, res) => {
     const itemId = req.params.id;
-    const response = await Item.deleteOne({'_id':itemId});
+    let response;
+    try {
+      response = await Item.deleteOne({'_id':itemId});
+    } catch (error) {
+      return res.status(404).json({'error': error});
+    }
+    
       res.json(response);
   });  
 
